@@ -19,7 +19,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_title": "Click to extract webpage sections"
   },
   "content_scripts": [
     {

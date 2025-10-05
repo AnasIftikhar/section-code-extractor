@@ -34,7 +34,13 @@ function highlightCode(elementId, language) {
 // Load extracted data from background script
 async function loadExtractedData() {
   chrome.runtime.sendMessage({ action: 'getExtractedData' }, (response) => {
-    if (response.data) {
+    if (chrome.runtime.lastError) {
+      // Ignore connection errors
+      console.log('Connection error (expected):', chrome.runtime.lastError.message);
+      showNoData();
+      return;
+    }
+    if (response && response.data) {
       currentData = response.data;
       displayData(currentData);
     } else {
@@ -72,22 +78,6 @@ function showNoData() {
 
 // Setup event listeners
 function setupEventListeners() {
-  // Toggle highlight mode button
-  document.getElementById('toggleHighlight').addEventListener('click', () => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleHighlight' }, (response) => {
-        // Show confirmation before closing
-        const btn = document.getElementById('toggleHighlight');
-        btn.innerHTML = '<span class="icon">✓</span> Activated! Go click on page';
-        btn.style.background = '#4CAF50';
-
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      });
-    });
-  });
-
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -102,11 +92,22 @@ function setupEventListeners() {
     });
   });
 
+  // Copy All button
+  document.getElementById('copyAllBtn').addEventListener('click', copyAllCode);
+
+  // Copy Separate button  <-- ADD THIS LINE HERE
+  document.getElementById('copySeparateBtn').addEventListener('click', copySeparateSections);
+
   // Export button
   document.getElementById('exportBtn').addEventListener('click', exportAsZip);
 
   // Clear button
   document.getElementById('clearBtn').addEventListener('click', clearData);
+
+  // Toggle highlight button - now closes popup and activates on page
+  document.getElementById('toggleHighlight').addEventListener('click', () => {
+    window.close(); // Close popup, background script will handle activation
+  });
 }
 
 // Switch between tabs
@@ -159,7 +160,64 @@ async function copyCode(type, button) {
   }
 }
 
-// Export as individual files (simplified without ZIP)
+// Copy all code as complete HTML file
+async function copyAllCode(event) {
+  if (!currentData) return;
+
+  const button = event.target.closest('button');
+  const allCode = generateFullHTML(currentData);
+
+  try {
+    await navigator.clipboard.writeText(allCode);
+
+    // Visual feedback
+    const originalText = button.innerHTML;
+    button.innerHTML = '<span class="icon">✓</span> All Code Copied!';
+    button.style.background = '#4CAF50';
+
+    setTimeout(() => {
+      button.innerHTML = originalText;
+      button.style.background = '';
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy:', err);
+    alert('Failed to copy to clipboard');
+  }
+}
+
+// Copy all code as separate sections
+async function copySeparateSections(event) {
+  if (!currentData) return;
+
+  const button = event.target.closest('button');
+  const separateCode = `<!-- ========== HTML ========== -->
+${currentData.html}
+
+/* ========== CSS ========== */
+${currentData.css}
+
+// ========== JavaScript ==========
+${currentData.js}`;
+
+  try {
+    await navigator.clipboard.writeText(separateCode);
+
+    // Visual feedback
+    const originalText = button.innerHTML;
+    button.innerHTML = '<span class="icon">✓</span> Sections Copied!';
+    button.style.background = '#4CAF50';
+
+    setTimeout(() => {
+      button.innerHTML = originalText;
+      button.style.background = '#667eea';
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy:', err);
+    alert('Failed to copy to clipboard');
+  }
+}
+
+// Export as individual files
 async function exportAsZip() {
   if (!currentData) return;
 
@@ -195,7 +253,7 @@ async function exportAsZip() {
     }, 2000);
   } catch (err) {
     console.error('Export failed:', err);
-    alert('Failed to export ZIP file');
+    alert('Failed to export files');
   }
 }
 
@@ -220,7 +278,7 @@ function generateFullHTML(data) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${data.sectionName}</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="${sanitizeFilename(data.sectionName)}_style.css">
 </head>
 <body>
   <!-- Extracted from: ${data.url} -->
@@ -228,7 +286,7 @@ function generateFullHTML(data) {
   
 ${data.html}
 
-  <script src="script.js"></script>
+  <script src="${sanitizeFilename(data.sectionName)}_script.js"></script>
 </body>
 </html>`;
 }
@@ -245,9 +303,9 @@ function generateReadme(data) {
 
 ## Files
 
-- \`index.html\` - HTML structure of the section
-- \`style.css\` - CSS styles for the section
-- \`script.js\` - JavaScript code for the section
+- \`${sanitizeFilename(data.sectionName)}_index.html\` - HTML structure of the section
+- \`${sanitizeFilename(data.sectionName)}_style.css\` - CSS styles for the section
+- \`${sanitizeFilename(data.sectionName)}_script.js\` - JavaScript code for the section
 
 ## Usage for Elementor
 
@@ -291,9 +349,9 @@ function clearData() {
   if (confirm('Clear extracted data? This cannot be undone.')) {
     currentData = null;
     chrome.runtime.sendMessage({
-      action: 'saveExtractedData',
-      data: null
+      action: 'clearExtractedData'
+    }, () => {
+      window.close(); // Close popup after clearing
     });
-    showNoData();
   }
 }

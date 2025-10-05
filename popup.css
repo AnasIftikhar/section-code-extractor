@@ -300,6 +300,16 @@ header h1 {
   border-top: 1px solid #e2e8f0;
 }
 
+.btn-primary {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #45a049;
+  transform: translateY(-1px);
+}
+
 /* Scrollbar styling */
 .code-wrapper::-webkit-scrollbar {
   width: 8px;
