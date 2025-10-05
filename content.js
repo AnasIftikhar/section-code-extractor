@@ -104,49 +104,48 @@ function formatHTML(html) {
 function extractCSS(element) {
   const styles = new Map();
   const elements = [element, ...element.querySelectorAll('*')];
+  const processedSelectors = new Set();
 
   elements.forEach(el => {
-    // Get computed styles
     const computed = window.getComputedStyle(el);
-    const cssText = [];
+    const rules = extractRelevantStyles(el, computed);
 
-    // Important CSS properties to extract
-    const importantProps = [
-      'display', 'position', 'top', 'left', 'right', 'bottom',
-      'width', 'height', 'max-width', 'max-height', 'min-width', 'min-height',
-      'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
-      'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-      'background', 'background-color', 'background-image', 'background-size', 'background-position',
-      'border', 'border-radius', 'box-shadow',
-      'color', 'font-family', 'font-size', 'font-weight', 'line-height', 'text-align',
-      'flex', 'flex-direction', 'justify-content', 'align-items', 'gap',
-      'grid', 'grid-template-columns', 'grid-template-rows', 'grid-gap',
-      'transform', 'transition', 'animation',
-      'opacity', 'z-index', 'overflow'
-    ];
+    if (rules.length > 0) {
+      const selector = getScopedSelector(el);
 
-    importantProps.forEach(prop => {
-      const value = computed.getPropertyValue(prop);
-      if (value && value !== 'none' && value !== 'normal' && value !== '0px') {
-        cssText.push(`  ${prop}: ${value};`);
+      // Skip if no valid selector or already processed
+      if (!selector || processedSelectors.has(selector)) {
+        return;
       }
-    });
 
-    if (cssText.length > 0) {
-      const selector = getSelector(el);
-      styles.set(selector, cssText.join('\n'));
+      processedSelectors.add(selector);
+
+      // Add base styles
+      let cssBlock = rules.join('\n');
+
+      // Add hover styles if available
+      const hoverStyles = extractHoverStyles(el);
+      if (hoverStyles.length > 0) {
+        styles.set(`${selector}:hover`, hoverStyles.join('\n'));
+      }
+
+      styles.set(selector, cssBlock);
     }
   });
 
-  // Combine all styles
-  let css = '';
+  // Combine all styles with better organization
+  let css = '/* ========== Extracted Section Styles ========== */\n';
+  css += '/* Copy these styles to Elementor Custom CSS */\n\n';
+
   styles.forEach((rules, selector) => {
     css += `${selector} {\n${rules}\n}\n\n`;
   });
 
+  // Add basic responsive styles
+  css += generateResponsiveStyles(element, getScopedSelector(element));
+
   return css;
 }
-
 // Generate CSS selector for element
 function getSelector(el) {
   if (el.id) return `#${el.id}`;
@@ -161,11 +160,18 @@ function getSelector(el) {
   return el.tagName.toLowerCase();
 }
 
-// Extract only relevant styles
 function extractRelevantStyles(el, computed) {
   const rules = [];
   const parent = el.parentElement;
   const parentComputed = parent ? window.getComputedStyle(parent) : null;
+
+  // Skip extraction for generic elements without meaningful classes/IDs
+  const hasIdentifier = el.id || el.classList.length > 0;
+  const isGenericTag = ['div', 'span', 'ul', 'li', 'a', 'img'].includes(el.tagName.toLowerCase());
+
+  if (isGenericTag && !hasIdentifier) {
+    return []; // Skip generic elements
+  }
 
   // Layout & Display
   if (computed.display !== 'block' && computed.display !== 'inline') {
@@ -183,7 +189,7 @@ function extractRelevantStyles(el, computed) {
   }
 
   // Flexbox
-  if (computed.display === 'flex') {
+  if (computed.display === 'flex' || computed.display === 'inline-flex') {
     if (computed.flexDirection !== 'row') {
       rules.push(`  flex-direction: ${computed.flexDirection};`);
     }
@@ -193,43 +199,69 @@ function extractRelevantStyles(el, computed) {
     if (computed.alignItems !== 'normal' && computed.alignItems !== 'stretch') {
       rules.push(`  align-items: ${computed.alignItems};`);
     }
+    if (computed.flexWrap !== 'nowrap') {
+      rules.push(`  flex-wrap: ${computed.flexWrap};`);
+    }
     if (computed.gap !== '0px' && computed.gap !== 'normal') {
       rules.push(`  gap: ${computed.gap};`);
     }
   }
 
-  // Dimensions
+  // Grid
+  if (computed.display === 'grid' || computed.display === 'inline-grid') {
+    if (computed.gridTemplateColumns !== 'none') {
+      rules.push(`  grid-template-columns: ${computed.gridTemplateColumns};`);
+    }
+    if (computed.gridTemplateRows !== 'none') {
+      rules.push(`  grid-template-rows: ${computed.gridTemplateRows};`);
+    }
+    if (computed.gap !== '0px') {
+      rules.push(`  gap: ${computed.gap};`);
+    }
+  }
+
+  // Dimensions - be more selective
   const width = computed.width;
   const height = computed.height;
 
-  if (width && !width.includes('%') && parseFloat(width) > 0 && isExplicitSize(el, 'width')) {
-    rules.push(`  width: ${width};`);
+  if (width && width !== 'auto' && !width.includes('px') || (parseFloat(width) > 0 && parseFloat(width) < 2000)) {
+    if (el.style.width || computed.maxWidth !== 'none') {
+      rules.push(`  width: ${width};`);
+    }
   }
-  if (height && height !== 'auto' && parseFloat(height) > 0 && isExplicitSize(el, 'height')) {
-    rules.push(`  height: ${height};`);
+
+  if (height && height !== 'auto' && parseFloat(height) > 0) {
+    if (el.style.height || computed.minHeight !== '0px') {
+      rules.push(`  height: ${height};`);
+    }
   }
-  if (computed.maxWidth !== 'none') {
+
+  if (computed.maxWidth !== 'none' && computed.maxWidth !== width) {
     rules.push(`  max-width: ${computed.maxWidth};`);
   }
+
   if (computed.minHeight !== '0px' && computed.minHeight !== 'auto') {
     rules.push(`  min-height: ${computed.minHeight};`);
   }
 
-  // Spacing
-  ['margin', 'padding'].forEach(prop => {
-    const val = computed[prop];
-    if (hasNonZeroSpacing(val)) {
-      rules.push(`  ${prop}: ${val};`);
-    }
-  });
-
-  // Background
-  if (hasVisibleBackground(computed.backgroundColor)) {
-    rules.push(`  background-color: ${computed.backgroundColor};`);
+  // Spacing - only if non-zero
+  if (hasNonZeroSpacing(computed.margin)) {
+    rules.push(`  margin: ${computed.margin};`);
   }
+
+  if (hasNonZeroSpacing(computed.padding)) {
+    rules.push(`  padding: ${computed.padding};`);
+  }
+
+  // Background - only visible backgrounds
+  const bgColor = computed.backgroundColor;
+  if (hasVisibleBackground(bgColor)) {
+    rules.push(`  background-color: ${bgColor};`);
+  }
+
   if (computed.backgroundImage !== 'none') {
     rules.push(`  background-image: ${computed.backgroundImage};`);
-    if (computed.backgroundSize !== 'auto') {
+    if (computed.backgroundSize !== 'auto auto') {
       rules.push(`  background-size: ${computed.backgroundSize};`);
     }
     if (computed.backgroundPosition !== '0% 0%') {
@@ -241,11 +273,13 @@ function extractRelevantStyles(el, computed) {
   }
 
   // Border
+  const borderWidth = computed.borderWidth;
   if (hasVisibleBorder(computed)) {
-    if (computed.borderWidth !== '0px') {
-      rules.push(`  border: ${computed.borderWidth} ${computed.borderStyle} ${computed.borderColor};`);
-    }
+    const borderStyle = computed.borderStyle;
+    const borderColor = computed.borderColor;
+    rules.push(`  border: ${borderWidth} ${borderStyle} ${borderColor};`);
   }
+
   if (computed.borderRadius !== '0px') {
     rules.push(`  border-radius: ${computed.borderRadius};`);
   }
@@ -254,86 +288,127 @@ function extractRelevantStyles(el, computed) {
   if (computed.boxShadow !== 'none') {
     rules.push(`  box-shadow: ${computed.boxShadow};`);
   }
+
   if (computed.opacity !== '1') {
     rules.push(`  opacity: ${computed.opacity};`);
   }
+
   if (computed.transform !== 'none') {
     rules.push(`  transform: ${computed.transform};`);
   }
 
-  // Typography (only if different from parent)
-  if (!parentComputed || computed.color !== parentComputed.color) {
-    if (hasVisibleColor(computed.color)) {
-      rules.push(`  color: ${computed.color};`);
+  // Typography - CRITICAL for exact replication
+  const textColor = computed.color;
+  if (hasVisibleColor(textColor)) {
+    // Always include color for text elements
+    const isTextElement = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'span', 'li', 'button'].includes(el.tagName.toLowerCase());
+    if (isTextElement || !parentComputed || textColor !== parentComputed.color) {
+      rules.push(`  color: ${textColor};`);
     }
   }
 
-  if (!parentComputed || computed.fontFamily !== parentComputed.fontFamily) {
-    rules.push(`  font-family: ${computed.fontFamily};`);
-  }
-
-  if (!parentComputed || computed.fontSize !== parentComputed.fontSize) {
-    if (computed.fontSize !== '16px') {
-      rules.push(`  font-size: ${computed.fontSize};`);
+  // Font family - always include for styled elements
+  const fontFamily = computed.fontFamily;
+  if (!parentComputed || fontFamily !== parentComputed.fontFamily) {
+    if (fontFamily !== 'Times New Roman' && fontFamily !== 'serif') {
+      rules.push(`  font-family: ${fontFamily};`);
     }
   }
 
-  if (computed.fontWeight !== '400' && computed.fontWeight !== 'normal') {
-    rules.push(`  font-weight: ${computed.fontWeight};`);
+  // Font size - CRITICAL
+  const fontSize = computed.fontSize;
+  if (fontSize && fontSize !== '16px') {
+    rules.push(`  font-size: ${fontSize};`);
   }
 
+  // Font weight - CRITICAL for headings and emphasis
+  const fontWeight = computed.fontWeight;
+  if (fontWeight !== '400' && fontWeight !== 'normal') {
+    rules.push(`  font-weight: ${fontWeight};`);
+  }
+
+  // Text alignment
   if (computed.textAlign !== 'start' && computed.textAlign !== 'left') {
     rules.push(`  text-align: ${computed.textAlign};`);
   }
 
-  if (computed.textDecoration !== 'none solid rgb(0, 0, 0)' &&
-    !computed.textDecoration.includes('none')) {
+  // Text decoration
+  if (computed.textDecoration && !computed.textDecoration.includes('none')) {
     rules.push(`  text-decoration: ${computed.textDecoration};`);
   }
 
+  // Letter spacing - important for styled text
+  const letterSpacing = computed.letterSpacing;
+  if (letterSpacing && letterSpacing !== 'normal' && letterSpacing !== '0px') {
+    rules.push(`  letter-spacing: ${letterSpacing};`);
+  }
+
+  // Text transform
+  if (computed.textTransform !== 'none') {
+    rules.push(`  text-transform: ${computed.textTransform};`);
+  }
+
+  // Line height - important for readability
   if (computed.lineHeight !== 'normal' && shouldIncludeLineHeight(computed)) {
     rules.push(`  line-height: ${computed.lineHeight};`);
   }
 
-  // Cursor
-  if (computed.cursor !== 'auto' && computed.cursor !== 'default' && computed.cursor !== 'crosshair') {
-    rules.push(`  cursor: ${computed.cursor};`);
+  // Cursor - for interactive elements
+  const cursor = computed.cursor;
+  if (cursor !== 'auto' && cursor !== 'default' && cursor !== 'text') {
+    rules.push(`  cursor: ${cursor};`);
   }
 
-  // Transitions
-  if (computed.transition !== 'all 0s ease 0s' && !computed.transition.includes('0s')) {
-    rules.push(`  transition: ${computed.transition};`);
+  // Transitions - for smooth interactions
+  const transition = computed.transition;
+  if (transition && !transition.includes('all 0s') && transition !== 'all 0s ease 0s') {
+    rules.push(`  transition: ${transition};`);
   }
 
-  // Z-index (only if positioned)
-  if (computed.position !== 'static' && computed.zIndex !== 'auto') {
+  // Z-index - for layering
+  if (computed.position !== 'static' && computed.zIndex !== 'auto' && computed.zIndex !== '0') {
     rules.push(`  z-index: ${computed.zIndex};`);
+  }
+
+  // Overflow - important for scrolling
+  if (computed.overflow !== 'visible') {
+    rules.push(`  overflow: ${computed.overflow};`);
   }
 
   return rules;
 }
-
 // Extract hover styles by checking stylesheets
 function extractHoverStyles(el) {
   const rules = [];
   const selector = getScopedSelector(el);
 
+  if (!selector) return rules;
+
   try {
-    // Check all stylesheets for hover rules
     Array.from(document.styleSheets).forEach(sheet => {
       try {
         Array.from(sheet.cssRules || []).forEach(rule => {
           if (rule.selectorText && rule.selectorText.includes(':hover')) {
-            // Check if this rule might apply to our element
             const baseSelector = rule.selectorText.split(':hover')[0].trim();
-            if (el.matches(baseSelector)) {
-              // Extract hover properties
-              Array.from(rule.style).forEach(prop => {
-                const value = rule.style.getPropertyValue(prop);
-                if (value) {
-                  rules.push(`  ${prop}: ${value};`);
-                }
-              });
+
+            // Check if this rule applies to our element
+            try {
+              if (el.matches(baseSelector)) {
+                // Extract only important hover properties
+                const importantHoverProps = [
+                  'background-color', 'color', 'border-color',
+                  'opacity', 'transform', 'box-shadow'
+                ];
+
+                importantHoverProps.forEach(prop => {
+                  const value = rule.style.getPropertyValue(prop);
+                  if (value && value !== 'initial' && value !== 'inherit') {
+                    rules.push(`  ${prop}: ${value};`);
+                  }
+                });
+              }
+            } catch (e) {
+              // Element doesn't match selector
             }
           }
         });
@@ -347,69 +422,119 @@ function extractHoverStyles(el) {
 
   return rules;
 }
-
 // Generate responsive styles
 function generateResponsiveStyles(element, baseSelector) {
-  let responsive = '';
+  if (!baseSelector) return '';
 
-  responsive += '/* ========== Responsive Styles ========== */\n\n';
+  let responsive = '\n/* ========== Responsive Styles ========== */\n';
+  responsive += '/* Adjust these breakpoints based on your design */\n\n';
+
+  const computed = window.getComputedStyle(element);
 
   // Tablet
-  responsive += '/* Tablet */\n';
+  responsive += '/* Tablet (1024px and below) */\n';
   responsive += '@media (max-width: 1024px) {\n';
   responsive += `  ${baseSelector} {\n`;
-  responsive += '    padding: 20px;\n';
+
+  if (computed.display === 'flex') {
+    responsive += '    flex-wrap: wrap;\n';
+  }
+  if (parseFloat(computed.padding) > 20) {
+    responsive += '    padding: 20px;\n';
+  }
+  if (parseFloat(computed.fontSize) > 16) {
+    const tabletSize = Math.round(parseFloat(computed.fontSize) * 0.9);
+    responsive += `    font-size: ${tabletSize}px;\n`;
+  }
+
   responsive += '  }\n';
   responsive += '}\n\n';
 
   // Mobile
-  responsive += '/* Mobile */\n';
+  responsive += '/* Mobile (768px and below) */\n';
   responsive += '@media (max-width: 768px) {\n';
   responsive += `  ${baseSelector} {\n`;
-  responsive += '    flex-direction: column;\n';
-  responsive += '    padding: 15px;\n';
+
+  if (computed.display === 'flex') {
+    responsive += '    flex-direction: column;\n';
+  }
+  if (parseFloat(computed.padding) > 15) {
+    responsive += '    padding: 15px;\n';
+  }
+  if (parseFloat(computed.fontSize) > 14) {
+    const mobileSize = Math.round(parseFloat(computed.fontSize) * 0.85);
+    responsive += `    font-size: ${mobileSize}px;\n`;
+  }
+  if (parseFloat(computed.gap) > 0) {
+    responsive += '    gap: 15px;\n';
+  }
+
   responsive += '  }\n';
-  responsive += '}\n\n';
+  responsive += '}\n';
 
   return responsive;
 }
-
 // Get scoped selector (not generic tags)
 function getScopedSelector(el, baseSelector = '') {
-  // Priority 1: Use meaningful ID
-  if (el.id && !el.id.startsWith('elementor-') && !el.id.startsWith('menu-item-')) {
+  // Priority 1: Use meaningful ID (skip Elementor/WordPress IDs)
+  if (el.id &&
+    !el.id.startsWith('elementor-') &&
+    !el.id.startsWith('menu-item-') &&
+    !el.id.startsWith('post-') &&
+    !el.id.startsWith('comment-')) {
     return `#${el.id}`;
   }
 
-  // Priority 2: Use meaningful classes
+  // Priority 2: Use meaningful classes (filter out framework classes)
   const meaningfulClasses = Array.from(el.classList).filter(cls =>
     !cls.startsWith('elementor-') &&
     !cls.startsWith('e-con') &&
     !cls.startsWith('e-flex') &&
+    !cls.startsWith('e-') &&
     !cls.startsWith('wp-') &&
-    cls.length > 2
+    !cls.startsWith('ekit-') &&
+    !cls.startsWith('elementskit-') &&
+    !cls.includes('lazyload') &&
+    !cls.includes('animated') &&
+    cls.length > 1 &&
+    cls !== 'active' &&
+    cls !== 'current'
   );
 
   if (meaningfulClasses.length > 0) {
+    // Use up to 2 classes for specificity
     return `.${meaningfulClasses.slice(0, 2).join('.')}`;
   }
 
-  // Priority 3: Use semantic tag with context
+  // Priority 3: Use semantic tag with parent context
   const tag = el.tagName.toLowerCase();
 
-  // For common tags, add more context
-  if (['div', 'span', 'a', 'li', 'ul'].includes(tag)) {
+  // For generic tags, add parent context
+  if (['div', 'span', 'a', 'li', 'ul', 'p'].includes(tag)) {
     const parent = el.parentElement;
-    if (parent && parent.classList.length > 0) {
-      const parentClass = Array.from(parent.classList).find(c =>
-        !c.startsWith('elementor-') && c.length > 2
+    if (parent) {
+      const parentClasses = Array.from(parent.classList).filter(c =>
+        !c.startsWith('elementor-') &&
+        !c.startsWith('e-') &&
+        !c.startsWith('wp-') &&
+        c.length > 2
       );
-      if (parentClass) {
-        return `.${parentClass} ${tag}`;
+
+      if (parentClasses.length > 0) {
+        return `.${parentClasses[0]} > ${tag}`;
+      }
+
+      // Use parent tag if no class
+      if (parent.tagName.toLowerCase() !== 'body') {
+        return `${parent.tagName.toLowerCase()} > ${tag}`;
       }
     }
+
+    // Skip extraction for naked generic tags
+    return null;
   }
 
+  // For semantic tags (header, nav, section, etc.), use as is
   return tag;
 }
 
