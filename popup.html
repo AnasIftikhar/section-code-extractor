@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section Code Extractor</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="prism.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>Section Code Extractor</h1>
+      <p class="subtitle">Extract HTML, CSS & JS from webpage sections</p>
+    </header>
+
+    <div class="actions">
+      <button id="toggleHighlight" class="btn btn-primary">
+        <span class="icon">🎯</span> Toggle Highlight Mode
+      </button>
+    </div>
+
+    <div id="noData" class="no-data">
+      <div class="empty-state">
+        <div class="empty-icon">📦</div>
+        <h3>No Code Extracted Yet</h3>
+        <p>Click "Toggle Highlight Mode" then click on any section of the webpage to extract its code.</p>
+        <div class="instructions">
+          <h4>How to use:</h4>
+          <ol>
+            <li>Click "Toggle Highlight Mode" button</li>
+            <li>Hover over webpage elements to highlight them</li>
+            <li>Click on the desired section to extract</li>
+            <li>View and copy the extracted code here</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div id="dataContainer" class="data-container" style="display: none;">
+      <div class="section-info">
+        <div class="info-item">
+          <span class="label">Section:</span>
+          <span id="sectionName" class="value"></span>
+        </div>
+        <div class="info-item">
+          <span class="label">URL:</span>
+          <span id="sectionUrl" class="value truncate"></span>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="html">
+          <span class="icon">📄</span> HTML
+        </button>
+        <button class="tab" data-tab="css">
+          <span class="icon">🎨</span> CSS
+        </button>
+        <button class="tab" data-tab="js">
+          <span class="icon">⚡</span> JavaScript
+        </button>
+      </div>
+
+      <div class="tab-content">
+        <div id="htmlContent" class="content-panel active">
+          <div class="panel-header">
+            <h3>HTML Code</h3>
+            <button class="btn-copy" data-copy="html">
+              <span class="icon">📋</span> Copy
+            </button>
+          </div>
+          <div class="code-wrapper">
+            <pre><code id="htmlCode" class="language-html"></code></pre>
+          </div>
+        </div>
+
+        <div id="cssContent" class="content-panel">
+          <div class="panel-header">
+            <h3>CSS Code</h3>
+            <button class="btn-copy" data-copy="css">
+              <span class="icon">📋</span> Copy
+            </button>
+          </div>
+          <div class="code-wrapper">
+            <pre><code id="cssCode" class="language-css"></code></pre>
+          </div>
+        </div>
+
+        <div id="jsContent" class="content-panel">
+          <div class="panel-header">
+            <h3>JavaScript Code</h3>
+            <button class="btn-copy" data-copy="js">
+              <span class="icon">📋</span> Copy
+            </button>
+          </div>
+          <div class="code-wrapper">
+            <pre><code id="jsCode" class="language-javascript"></code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="export-section">
+        <button id="exportBtn" class="btn btn-export">
+          <span class="icon">📦</span> Export as ZIP
+        </button>
+        <button id="clearBtn" class="btn btn-secondary">
+          <span class="icon">🗑️</span> Clear
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

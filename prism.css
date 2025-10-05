@@ -1,0 +1,58 @@
+code[class*="language-"],
+pre[class*="language-"] {
+    color: #ccc;
+    background: none;
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 1em;
+    text-align: left;
+    white-space: pre;
+    word-spacing: normal;
+    word-break: normal;
+    word-wrap: normal;
+    line-height: 1.5;
+    tab-size: 4;
+}
+
+.token.comment {
+    color: #7c7c7c;
+}
+
+.token.tag {
+    color: #e2777a;
+}
+
+.token.attr-name {
+    color: #6ab0f3;
+}
+
+.token.attr-value {
+    color: #99c794;
+}
+
+.token.punctuation {
+    color: #ccc;
+}
+
+.token.selector {
+    color: #c594c5;
+}
+
+.token.property {
+    color: #f99157;
+}
+
+.token.string {
+    color: #99c794;
+}
+
+.token.keyword {
+    color: #c594c5;
+}
+
+.token.function {
+    color: #6699cc;
+}
+
+.token.number {
+    color: #f99157;
+}
