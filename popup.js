@@ -59,6 +59,12 @@ function displayData(data) {
   document.getElementById('sectionUrl').textContent = data.url;
   document.getElementById('sectionUrl').title = data.url;
 
+  // Add context hint if available
+  if (data.sectionContext) {
+    const contextHint = `Type: ${data.sectionContext.type} | Contains: ${data.sectionContext.contains.join(', ') || 'basic elements'}`;
+    document.getElementById('sectionName').title = contextHint;
+  }
+
   // Update code displays with simple highlighting
   document.getElementById('htmlCode').textContent = data.html;
   document.getElementById('cssCode').textContent = data.css;
@@ -185,19 +191,32 @@ async function copyAllCode(event) {
   }
 }
 
-// Copy all code as separate sections
+// Copy all code as separate sections in full HTML structure
 async function copySeparateSections(event) {
   if (!currentData) return;
 
   const button = event.target.closest('button');
-  const separateCode = `<!-- ========== HTML ========== -->
+  const separateCode = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${currentData.sectionName} - Extracted Section</title>
+  <style>
+${currentData.css}
+  </style>
+</head>
+<body>
+  <!-- Extracted from: ${currentData.url} -->
+  <!-- Section Type: ${currentData.sectionContext ? currentData.sectionContext.type : 'unknown'} -->
+  
 ${currentData.html}
 
-/* ========== CSS ========== */
-${currentData.css}
-
-// ========== JavaScript ==========
-${currentData.js}`;
+  <script>
+${currentData.js}
+  </script>
+</body>
+</html>`;
 
   try {
     await navigator.clipboard.writeText(separateCode);
